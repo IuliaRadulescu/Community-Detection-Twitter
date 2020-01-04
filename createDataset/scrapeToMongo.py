@@ -25,7 +25,7 @@ class TwitterScraper:
 			accessTokenSecret = data["ACCESS_SECRET"]
 
 		auth = tweepy.AppAuthHandler(consumerKey, consumerSecret)
-		self.api = tweepy.API(auth, wait_on_rate_limit=False)
+		self.api = tweepy.API(auth, wait_on_rate_limit=True)
 
 	def formatTweet(self, tweet):
 
