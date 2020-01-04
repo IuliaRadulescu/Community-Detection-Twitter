@@ -24,10 +24,8 @@ class TwitterScraper:
 			accessToken = data["ACCESS_TOKEN"]
 			accessTokenSecret = data["ACCESS_SECRET"]
 
-		auth = tweepy.OAuthHandler(consumerKey, consumerSecret)
-		auth.set_access_token(accessToken, accessTokenSecret)
-
-		self.api = tweepy.API(auth, wait_on_rate_limit=True)
+		auth = tweepy.AppAuthHandler(consumerKey, consumerSecret)
+		self.api = tweepy.API(auth, wait_on_rate_limit=False)
 
 	def formatTweet(self, tweet):
 
@@ -66,19 +64,12 @@ class TwitterScraper:
 				"userMentions": userMentions,
 				"hashtags": hashtags
 			},
-			"retweetCount": tweetJson["retweet_count"],
 			"retweeted": tweetJson["retweeted"]
 		}
 
-	def getFollowerListForUser(self, userId, followersIds):
-		# get followers ids
-		followerTweets = []
-		cursorFollowersIds = tweepy.Cursor(self.api.followers_ids, id = userId).items()
-
-		for followerId in cursorFollowersIds:
-			followersIds.append(followerId)
-
-
+	'''
+	Scrape communities based on the tweet-retweet relation
+	'''
 	def scrapeCommunities(self, location, numberOfTweetsPerRequest, totalNumberOfTweets, resultType):
 
 		tweetsList = []
@@ -86,49 +77,41 @@ class TwitterScraper:
 		counter = 0
 		
 		while counter < totalNumberOfTweets:
-
+			print(counter)
 			try:
+				# get only retweets
 				if (counter == 0):
-					cursor = tweepy.Cursor(self.api.search, q='*', geocode=location, count = numberOfTweetsPerRequest, result_type = resultType, tweet_mode="extended")
+					cursor = tweepy.Cursor(self.api.search, q='* filter:retweets', geocode=location, count = numberOfTweetsPerRequest, result_type = resultType, tweet_mode="extended")
 				else:
 					# use max_id to pick up where we left off
-					cursor = tweepy.Cursor(self.api.search, q='*', geocode=location, count = numberOfTweetsPerRequest, result_type = resultType, max_id = formattedTweet["tweetId"], tweet_mode="extended") 
+					cursor = tweepy.Cursor(self.api.search, q='* filter:retweets', geocode=location, count = numberOfTweetsPerRequest, result_type = resultType, max_id = formattedTweet["tweetId"], tweet_mode="extended") 
 
 				for tweet in cursor.items(numberOfTweetsPerRequest):
 
 					formattedTweet = self.formatTweet(tweet)
 
-					print("got tweet number " + str(counter))
-					print(formattedTweet["user"]["userFollowersCount"])
-					
-					formattedTweet["user"]["userFollowersIds"] = []
-					
-					# get follower list and followers tweets
-					self.getFollowerListForUser(formattedTweet["user"]["userId"], formattedTweet["user"]["userFollowersIds"])
-					
+					# add parent tweet to the list
+
+					parentTweet = self.formatTweet(tweet.retweeted_status)
+					tweetsList.append(parentTweet)
+
+					formattedTweet["retweetOf"] = {
+						"tweetId": None,
+						"userId": None
+					}
+
+					formattedTweet["retweetOf"]["tweetId"] = formattedTweet["tweetId"]
+					formattedTweet["retweetOf"]["userId"] = formattedTweet["user"]["userId"]
+
 					tweetsList.append(formattedTweet)
 
-					counter = counter + 1
+					counter = counter + 1					
 
-			except: # ConnectionResetError: [Errno 104] Connection reset by peer - Twitter cuts off the connection so you need to reconnect
+			except Exception as exp: # ConnectionResetError: [Errno 104] Connection reset by peer - Twitter cuts off the connection so you need to reconnect
+				print(exp)
 				time.sleep(60)
 				self.connectTwitter()
 
-		return tweetsList
-
-	def fetchTweetForUser(self, userId, numberOfUserTweets):
-
-		tweetsList = []
-
-		try:
-			for tweet in tweepy.Cursor(self.api.user_timeline, id=userId, tweet_mode="extended").items(numberOfUserTweets):
-				formattedTweet = self.formatTweet(tweet)
-				tweetsList.append(formattedTweet)
-		except tweepy.TweepError:
-			print ("tweepy.TweepError")
-		except:
-			e = sys.exc_info()[0]
-			print ("Error: %s", e)
 		return tweetsList
 
 class MongoDBWriter:
@@ -141,7 +124,7 @@ class MongoDBWriter:
 
 
 twitterScraper = TwitterScraper('twitterCredentials.json')
-tweets = twitterScraper.scrapeCommunities("-34.285999,150.545999,10km", 15, 240, "recent") #popular sometimes does not respect count, see https://github.com/tweepy/tweepy/issues/560
+tweets = twitterScraper.scrapeCommunities("40.730610,-73.935242,50km", 300, 300, "recent") #popular sometimes does not respect count, see https://github.com/tweepy/tweepy/issues/560
 # print(tweets)
 mongoDBWriter = MongoDBWriter("TwitterCommunityDetection")
-mongoDBWriter.writeTweetsToDB(tweets, "australiaFires_4_1_2019_12_00")
+mongoDBWriter.writeTweetsToDB(tweets, "new_york")
