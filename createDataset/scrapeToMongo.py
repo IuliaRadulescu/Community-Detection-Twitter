@@ -91,17 +91,17 @@ class TwitterScraper:
 					formattedTweet = self.formatTweet(tweet)
 
 					# add parent tweet to the list
-
 					parentTweet = self.formatTweet(tweet.retweeted_status)
 					tweetsList.append(parentTweet)
 
+					# set the retweet's parents and then add it to the list
 					formattedTweet["retweetOf"] = {
 						"tweetId": None,
 						"userId": None
 					}
 
-					formattedTweet["retweetOf"]["tweetId"] = formattedTweet["tweetId"]
-					formattedTweet["retweetOf"]["userId"] = formattedTweet["user"]["userId"]
+					formattedTweet["retweetOf"]["tweetId"] = parentTweet["tweetId"]
+					formattedTweet["retweetOf"]["userId"] = parentTweet["user"]["userId"]
 
 					tweetsList.append(formattedTweet)
 
@@ -124,7 +124,7 @@ class MongoDBWriter:
 
 
 twitterScraper = TwitterScraper('twitterCredentials.json')
-tweets = twitterScraper.scrapeCommunities("40.730610,-73.935242,50km", 300, 300, "recent") #popular sometimes does not respect count, see https://github.com/tweepy/tweepy/issues/560
+tweets = twitterScraper.scrapeCommunities("40.730610,-73.935242,50km", 200, 200, "recent") #popular sometimes does not respect count, see https://github.com/tweepy/tweepy/issues/560
 # print(tweets)
 mongoDBWriter = MongoDBWriter("TwitterCommunityDetection")
 mongoDBWriter.writeTweetsToDB(tweets, "new_york")

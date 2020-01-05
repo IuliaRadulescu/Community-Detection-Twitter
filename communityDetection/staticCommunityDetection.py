@@ -30,7 +30,7 @@ class CommunityDetection():
 
 		self.g.add_edges(edges)
 
-		# self.g.write_gml("fires.gml")
+		self.g.write_gml("new_york.gml")
 
 	def applyLouvain(self):
 
@@ -40,31 +40,28 @@ class CommunityDetection():
 		#print(partition[0])
 
 	'''
-	Transform userId - userFollowerIds in order to be fed into igraph
+	Transform tweet - retweet in order to be fed into igraph
 	Use Adjacency List 
 	'''
 	def preprocessDataset(self, twitterDatset):
 
-		userFollwersDict = {}
 		nodeId = 0
-		edgesDict = {}
-
-		for userInfo in twitterDatset:
-			userFollwersDict[userInfo["user"]["userId"]] = userInfo["user"]["userFollowersIds"]
-
-		users = list(set(userFollwersDict.keys()))
 		edgesDict = collections.defaultdict(list)
+		userIds2nodeIds = {}
 
-		nodeId = 0
+		for element in twitterDatset:
+			userId = element["user"]["userId"]
+			parentId = element["retweetOf"]["userId"]
 
-		for key in userFollwersDict:
-			edgesDictKey = nodeId
-			for u in users:
-				if u in userFollwersDict[key]:
-					edgesDict[edgesDictKey].append(nodeId+1)
-					nodeId = nodeId + 1
+			if userId not in list(userIds2nodeIds.keys()):
+				userIds2nodeIds[userId] = nodeId
+				nodeId = nodeId + 1
 
-		# print(len(list(edgesDict.keys())))
+			if parentId not in list(userIds2nodeIds.keys()):
+				userIds2nodeIds[parentId] = nodeId
+				nodeId = nodeId + 1
+
+			edgesDict[userIds2nodeIds[userId]].append(userIds2nodeIds[parentId])
 
 		return edgesDict
 
@@ -84,10 +81,10 @@ class MongoDBReader():
 
 		return tweetsDataset
 
-	def readTwitterDataset(self, collection, selectedFields):
+	def readTwitterUserTweetRetweet(self, collection):
 		tweetsConnections = []
 
-		tweetsConnectionsCursor = self.mongoDriver.getRecords(collection, {}, selectedFields)
+		tweetsConnectionsCursor = self.mongoDriver.getRecords(collection, {"retweetOf": {"$ne": None}}, {'_id': 0, 'user.userId':1, 'retweetOf.userId':1})
 
 		for tweet in tweetsConnectionsCursor:
 			tweetsConnections.append(tweet)
@@ -95,7 +92,7 @@ class MongoDBReader():
 		return tweetsConnections
 
 mongoDBReader = MongoDBReader("TwitterCommunityDetection")
-tweetsDataset = mongoDBReader.readTwitterDataset("australiaFires_3_1_2019_13_00", {'_id': 0, 'user.userId':1, 'user.userFollowersIds':1})
+tweetsDataset = mongoDBReader.readTwitterUserTweetRetweet("new_york")
 
 commnityDetection = CommunityDetection()
 edgesDict = commnityDetection.preprocessDataset(tweetsDataset)
